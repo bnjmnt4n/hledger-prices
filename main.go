@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -109,18 +110,22 @@ func main() {
 
 	errors := make([]error, 0)
 
+	stock_symbols := cleanStringSlice(strings.Split(*stocks, ","))
+	currency_symbols := cleanStringSlice(strings.Split(*currencies, ","))
+
 	// Get stock prices.
-	stock_symbols_str := strings.TrimSpace(*stocks)
-	if stock_symbols_str != "" {
+	if len(stock_symbols) > 0 {
 		fmt.Println("; Stocks")
 
 		stocks_chan, errors_chan := make(chan stock), make(chan error)
-		stock_symbols := strings.Split(stock_symbols_str, ",")
 		go getStockPrices(stock_symbols, stocks_chan, errors_chan)
 
 		for i := 0; i < len(stock_symbols); i++ {
 			select {
 			case stock := <-stocks_chan:
+				// Add currency of current stock to list of currencies to be fetched.
+				currency_symbols = append(currency_symbols, stock.Currency)
+
 				_, err := fmt.Printf("P %s %s %s %f", stock.Date.Format("2006/01/02"), stock.Symbol, stock.Currency, stock.Price)
 				fmt.Println("")
 				if err != nil {
@@ -133,12 +138,11 @@ func main() {
 	}
 
 	// Get currency exchange rates.
-	currencies_str := strings.TrimSpace(*currencies)
-	if currencies_str != "" {
+	currency_symbols = cleanStringSlice(currency_symbols)
+	if len(currency_symbols) > 0 {
 		fmt.Println("; Currencies")
 
 		currencies_chan, errors_chan := make(chan currencyExchangeRate), make(chan error)
-		currency_symbols := strings.Split(currencies_str, ",")
 		go getCurrencies(currency_symbols, currencies_chan, errors_chan)
 
 		for i := 0; i < len(currency_symbols); i++ {
@@ -270,4 +274,25 @@ func getStockPrices(stock_symbols []string, stocks_chan chan<- stock, errors_cha
 
 	close(stocks_chan)
 	close(errors_chan)
+}
+
+// Trims whitespace from each string in a slice, sorts the slice and removes duplicate strings.
+func cleanStringSlice(strs []string) []string {
+	result := make([]string, 0, len(strs))
+
+	for i, str := range strs {
+		strs[i] = strings.TrimSpace(str)
+	}
+	sort.Strings(strs)
+
+	var prev_str string
+	for _, str := range strs {
+		if str != "" && str != prev_str {
+			result = append(result, str)
+		}
+
+		prev_str = str
+	}
+
+	return result
 }
