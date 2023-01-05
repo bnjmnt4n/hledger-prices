@@ -24,6 +24,18 @@
           buildInputs = [
             pkgs.go
             pkgs.gopls
+
+            (pkgs.writeShellScriptBin "get-stock" ''
+              ${pkgs.curl}/bin/curl "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=$1&apikey=$ALPHA_VANTAGE_KEY"
+            '')
+
+            (pkgs.writeShellScriptBin "get-currency" ''
+              ${pkgs.curl}/bin/curl "https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=$1&to_currency=$2&apikey=$ALPHA_VANTAGE_KEY"
+            '')
+
+            (pkgs.writeShellScriptBin "search-stock" ''
+              ${pkgs.curl}/bin/curl --get --data-urlencode "keywords=$1" "https://www.alphavantage.co/query?function=SYMBOL_SEARCH&apikey=$ALPHA_VANTAGE_KEY"
+            '')
           ];
         };
       });
