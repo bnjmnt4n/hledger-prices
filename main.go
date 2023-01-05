@@ -35,56 +35,33 @@ type stock struct {
 }
 
 func (currency *currencyExchangeRate) UnmarshalJSON(b []byte) error {
-	var unmarshalledJson map[string]string
-	err := json.Unmarshal(b, &unmarshalledJson)
+	err := UnmarshalJsonWithCustomDate(b, currency, "2006-01-02 15:04:05")
 	if err != nil {
 		return err
-	}
-
-	struct_value := reflect.ValueOf(currency).Elem()
-	struct_type := reflect.TypeOf(*currency)
-	num_fields := struct_type.NumField()
-
-	for i := 0; i < num_fields; i++ {
-		field := struct_type.Field(i)
-		field_name := field.Name
-		json_field_name := field.Tag.Get("json")
-
-		if field_value, ok := unmarshalledJson[json_field_name]; ok {
-			st_field := struct_value.FieldByName(field_name)
-
-			if st_field.Kind() == reflect.String {
-				st_field.SetString(field_value)
-			} else if st_field.Kind() == reflect.Float64 {
-				fl, err := strconv.ParseFloat(field_value, 64)
-				if err != nil {
-					return err
-				}
-
-				st_field.SetFloat(fl)
-			} else if st_field.Type() == reflect.TypeOf(time.Time{}) {
-				date, err := time.Parse("2006-01-02 15:04:05", field_value)
-				if err != nil {
-					return err
-				}
-
-				st_field.Set(reflect.ValueOf(date))
-			}
-		}
 	}
 
 	return nil
 }
 
 func (stock *stock) UnmarshalJSON(b []byte) error {
+	err := UnmarshalJsonWithCustomDate(b, stock, "2006-01-02")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Unmarshal JSON with custom parsing to create `time.Time` fields.
+func UnmarshalJsonWithCustomDate[T any](b []byte, struct_ptr *T, dateLayout string) error {
 	var unmarshalledJson map[string]string
 	err := json.Unmarshal(b, &unmarshalledJson)
 	if err != nil {
 		return err
 	}
 
-	struct_value := reflect.ValueOf(stock).Elem()
-	struct_type := reflect.TypeOf(*stock)
+	struct_value := reflect.ValueOf(struct_ptr).Elem()
+	struct_type := reflect.TypeOf(*struct_ptr)
 	num_fields := struct_type.NumField()
 
 	for i := 0; i < num_fields; i++ {
@@ -105,7 +82,7 @@ func (stock *stock) UnmarshalJSON(b []byte) error {
 
 				st_field.SetFloat(fl)
 			} else if st_field.Type() == reflect.TypeOf(time.Time{}) {
-				date, err := time.Parse("2006-01-02", field_value)
+				date, err := time.Parse(dateLayout, field_value)
 				if err != nil {
 					return err
 				}
