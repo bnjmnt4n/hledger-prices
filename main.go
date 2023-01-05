@@ -183,8 +183,11 @@ func getAlphavantageData(url string, output any) error {
 		return err
 	}
 
-	// API returns error message in JSON field `Note`.
+	// API returns error message in JSON field `Note` or `Error Message`.
 	if error_note, ok := data["Note"]; ok {
+		return fmt.Errorf("Error: %s", error_note)
+	}
+	if error_note, ok := data["Error Message"]; ok {
 		return fmt.Errorf("Error: %s", error_note)
 	}
 
