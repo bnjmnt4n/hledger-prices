@@ -29,9 +29,16 @@ type currencyExchangeRate struct {
 }
 
 type stock struct {
-	Symbol string    `json:"01. symbol"`
-	Price  float64   `json:"05. price"`
-	Date   time.Time `json:"07. latest trading day"`
+	Symbol   string    `json:"01. symbol"`
+	Price    float64   `json:"05. price"`
+	Date     time.Time `json:"07. latest trading day"`
+	Currency string
+}
+
+type stockSearchResult struct {
+	Symbol     string  `json:"1. symbol"`
+	Currency   string  `json:"8. currency"`
+	MatchScore float64 `json:"9. matchScore,string"`
 }
 
 func (currency *currencyExchangeRate) UnmarshalJSON(b []byte) error {
@@ -235,6 +242,28 @@ func getStockPrices(stock_symbols []string, stocks_chan chan<- stock, errors_cha
 		if err != nil {
 			errors_chan <- fmt.Errorf("Failed to get stock price for %s: %w", stock_sym, err)
 		} else {
+			symbol, _, found := strings.Cut(stock.Symbol, ".")
+			stock.Symbol = symbol
+			// Default: assume that currency is USD for all stocks traded in the US market.
+			stock.Currency = "USD"
+			if found {
+				// Otherwise, fetch stock currency if stock is traded in other exchanges.
+				url := fmt.Sprintf("https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=%s&apikey=%s", stock_sym, *alphavantageKey)
+				stock_search_results := new([]stockSearchResult)
+				err := getAlphavantageData(url, stock_search_results)
+				if err != nil {
+					errors_chan <- fmt.Errorf("Failed to get stock currency for %s: %w", stock_sym, err)
+					continue
+				}
+
+				for _, stock_search_result := range *stock_search_results {
+					if stock_search_result.Symbol == stock_sym || stock_search_result.MatchScore == 1.0 {
+						stock.Currency = stock_search_result.Currency
+						break
+					}
+				}
+			}
+
 			stocks_chan <- *stock
 		}
 	}
