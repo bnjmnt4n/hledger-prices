@@ -14,11 +14,11 @@ import (
 )
 
 var (
-	alphavantageKey = flag.String("alphavantage-key", "", "API key for Alphavantage")
-	baseCurrency    = flag.String("base-currency", "SGD", "Base currency")
+	alphavantageKey = flag.String("alpha-vantage-key", "", "Alpha Vantage API key")
+	baseCurrency    = flag.String("base-currency", "USD", "Base currency")
 	stocks          = flag.String("stocks", "", "Stocks to obtain data for")
-	currencies      = flag.String("currencies", "USD", "Currencies to obtain data for")
-	delay           = flag.Int("delay", 15, "Number of seconds to delay between requests")
+	currencies      = flag.String("currencies", "", "Currencies to obtain data for")
+	delay           = flag.Int("delay", 0, "Number of seconds to delay to add between API requests")
 )
 
 type currencyExchangeRate struct {
@@ -141,7 +141,6 @@ func main() {
 			}
 		}
 	}
-
 
 	stock_symbols_str := strings.TrimSpace(*stocks)
 	if stock_symbols_str != "" {
