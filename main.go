@@ -109,29 +109,6 @@ func main() {
 
 	errors := make([]error, 0)
 
-	// Get currency exchange rates.
-	currencies_str := strings.TrimSpace(*currencies)
-	if currencies_str != "" {
-		fmt.Println("; Currencies")
-
-		currencies_chan, errors_chan := make(chan currencyExchangeRate), make(chan error)
-		currency_symbols := strings.Split(currencies_str, ",")
-		go getCurrencies(currency_symbols, currencies_chan, errors_chan)
-
-		for i := 0; i < len(currency_symbols); i++ {
-			select {
-			case exchange_rate := <-currencies_chan:
-				_, err := fmt.Printf("P %s %s %s %f", exchange_rate.Date.Format("2006/01/02"), exchange_rate.FromCurrency, exchange_rate.ToCurrency, exchange_rate.ExchangeRate)
-				fmt.Println("")
-				if err != nil {
-					// TODO: handle errors.
-				}
-			case err := <-errors_chan:
-				errors = append(errors, err)
-			}
-		}
-	}
-
 	// Get stock prices.
 	stock_symbols_str := strings.TrimSpace(*stocks)
 	if stock_symbols_str != "" {
@@ -145,6 +122,29 @@ func main() {
 			select {
 			case stock := <-stocks_chan:
 				_, err := fmt.Printf("P %s %s %s %f", stock.Date.Format("2006/01/02"), stock.Symbol, stock.Currency, stock.Price)
+				fmt.Println("")
+				if err != nil {
+					// TODO: handle errors.
+				}
+			case err := <-errors_chan:
+				errors = append(errors, err)
+			}
+		}
+	}
+
+	// Get currency exchange rates.
+	currencies_str := strings.TrimSpace(*currencies)
+	if currencies_str != "" {
+		fmt.Println("; Currencies")
+
+		currencies_chan, errors_chan := make(chan currencyExchangeRate), make(chan error)
+		currency_symbols := strings.Split(currencies_str, ",")
+		go getCurrencies(currency_symbols, currencies_chan, errors_chan)
+
+		for i := 0; i < len(currency_symbols); i++ {
+			select {
+			case exchange_rate := <-currencies_chan:
+				_, err := fmt.Printf("P %s %s %s %f", exchange_rate.Date.Format("2006/01/02"), exchange_rate.FromCurrency, exchange_rate.ToCurrency, exchange_rate.ExchangeRate)
 				fmt.Println("")
 				if err != nil {
 					// TODO: handle errors.
