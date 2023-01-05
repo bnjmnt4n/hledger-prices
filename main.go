@@ -193,21 +193,17 @@ func getAlphavantageData(url string, output any) error {
 
 	// JSON returned only contains a single item with an inner object.
 	for _, data := range data {
-		if data, ok := data.(map[string]any); ok {
-			json_bytes, err := json.Marshal(data)
-			if err != nil {
-				return err
-			}
-
-			err = json.Unmarshal(json_bytes, output)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		} else {
-			return errors.New("Could not convert data into output type")
+		json_bytes, err := json.Marshal(data)
+		if err != nil {
+			return err
 		}
+
+		err = json.Unmarshal(json_bytes, output)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	return errors.New("Response had no data")
