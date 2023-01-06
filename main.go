@@ -69,8 +69,9 @@ func UnmarshalJsonWithCustomDate[T any](b []byte, struct_ptr *T, dateLayout stri
 	}
 
 	struct_value := reflect.ValueOf(struct_ptr).Elem()
-	struct_type := reflect.TypeOf(*struct_ptr)
+	struct_type := struct_value.Type()
 	num_fields := struct_type.NumField()
+	json_has_fields := false
 
 	for i := 0; i < num_fields; i++ {
 		field := struct_type.Field(i)
@@ -78,6 +79,7 @@ func UnmarshalJsonWithCustomDate[T any](b []byte, struct_ptr *T, dateLayout stri
 		json_field_name := field.Tag.Get("json")
 
 		if field_value, ok := unmarshalledJson[json_field_name]; ok {
+			json_has_fields = true
 			st_field := struct_value.FieldByName(field_name)
 
 			if st_field.Kind() == reflect.String {
@@ -98,6 +100,10 @@ func UnmarshalJsonWithCustomDate[T any](b []byte, struct_ptr *T, dateLayout stri
 				st_field.Set(reflect.ValueOf(date))
 			}
 		}
+	}
+
+	if !json_has_fields {
+		return errors.New("JSON has no fields")
 	}
 
 	return nil
