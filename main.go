@@ -19,7 +19,7 @@ var (
 	baseCurrency    = flag.String("base-currency", "USD", "Base currency")
 	stocks          = flag.String("stocks", "", "Stocks to obtain data for")
 	currencies      = flag.String("currencies", "", "Currencies to obtain data for")
-	delay           = flag.Int("delay", 0, "Number of seconds to delay to add between API requests")
+	rateLimit       = flag.Int("rate-limit", 1000, "Number of requests per minute permitted to the Alpha Vantage API")
 )
 
 type currencyExchangeRate struct {
@@ -40,6 +40,38 @@ type stockSearchResult struct {
 	Symbol     string  `json:"1. symbol"`
 	Currency   string  `json:"8. currency"`
 	MatchScore float64 `json:"9. matchScore,string"`
+}
+
+type httpClient struct {
+	http.Client
+	RequestsPerMinute int
+	RequestsMade      int
+	LastInterval      time.Time
+}
+
+// Add a few seconds to the rate limit interval for extra leeway.
+const rateLimitInterval = time.Duration(63) * time.Second
+
+func (client *httpClient) Do(req *http.Request) (*http.Response, error) {
+	durationSinceLastInterval := time.Now().Sub(client.LastInterval)
+	if durationSinceLastInterval > rateLimitInterval {
+		client.LastInterval = time.Now()
+		client.RequestsMade = 0
+	} else {
+		if client.RequestsMade == client.RequestsPerMinute {
+			time.Sleep(rateLimitInterval - durationSinceLastInterval)
+			client.LastInterval = time.Now()
+			client.RequestsMade = 0
+		}
+	}
+
+	resp, err := client.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	client.RequestsMade++
+
+	return resp, err
 }
 
 func (currency *currencyExchangeRate) UnmarshalJSON(b []byte) error {
@@ -118,6 +150,8 @@ func main() {
 	stock_symbols := cleanStringSlice(strings.Split(*stocks, ","))
 	currency_symbols := cleanStringSlice(strings.Split(*currencies, ","))
 
+	client := &httpClient{Client: http.Client{}, RequestsPerMinute: *rateLimit}
+
 	// Get stock prices.
 	if len(stock_symbols) > 0 {
 		fmt.Println("; Stocks")
@@ -127,7 +161,7 @@ func main() {
 			stock
 			error
 		})
-		go getStockPrices(stock_symbols, results_chan)
+		go getStockPrices(client, stock_symbols, results_chan)
 
 		for result := range results_chan {
 			stock, error := result.stock, result.error
@@ -155,7 +189,7 @@ func main() {
 			currencyExchangeRate
 			error
 		})
-		go getCurrencies(currency_symbols, results_chan)
+		go getCurrencies(client, currency_symbols, results_chan)
 
 		for result := range results_chan {
 			exchange_rate, error := result.currencyExchangeRate, result.error
@@ -173,15 +207,13 @@ func main() {
 	}
 }
 
-var isFirstRequest bool = true
-
-func getAlphavantageData(url string, output any) error {
-	if !isFirstRequest {
-		time.Sleep(time.Second * time.Duration(*delay))
+func getAlphavantageData(client *httpClient, url string, output any) error {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
 	}
 
-	resp, err := http.Get(url)
-	isFirstRequest = false
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -228,14 +260,14 @@ func getAlphavantageData(url string, output any) error {
 	return errors.New("Response had no data")
 }
 
-func getCurrencies(currencies []string, results_chan chan<- struct {
+func getCurrencies(client *httpClient, currencies []string, results_chan chan<- struct {
 	currencyExchangeRate
 	error
 }) {
 	for _, currency_sym := range currencies {
 		url := fmt.Sprintf("https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=%s&to_currency=%s&apikey=%s", currency_sym, *baseCurrency, *alphavantageKey)
 		exchange_rate := new(currencyExchangeRate)
-		err := getAlphavantageData(url, exchange_rate)
+		err := getAlphavantageData(client, url, exchange_rate)
 
 		if err != nil {
 			exchange_rate.FromCurrency = currency_sym
@@ -254,14 +286,14 @@ func getCurrencies(currencies []string, results_chan chan<- struct {
 	close(results_chan)
 }
 
-func getStockPrices(stock_symbols []string, results_chan chan<- struct {
+func getStockPrices(client *httpClient, stock_symbols []string, results_chan chan<- struct {
 	stock
 	error
 }) {
 	for _, stock_sym := range stock_symbols {
 		url := fmt.Sprintf("https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s", stock_sym, *alphavantageKey)
 		stock_data := new(stock)
-		err := getAlphavantageData(url, stock_data)
+		err := getAlphavantageData(client, url, stock_data)
 
 		if stock_data.Symbol == "" {
 			stock_data.Symbol = stock_sym
@@ -280,7 +312,7 @@ func getStockPrices(stock_symbols []string, results_chan chan<- struct {
 				// Otherwise, fetch stock currency if stock is traded in other exchanges.
 				url := fmt.Sprintf("https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=%s&apikey=%s", stock_sym, *alphavantageKey)
 				stock_search_results := new([]stockSearchResult)
-				err := getAlphavantageData(url, stock_search_results)
+				err := getAlphavantageData(client, url, stock_search_results)
 				if err != nil {
 					results_chan <- struct {
 						stock
